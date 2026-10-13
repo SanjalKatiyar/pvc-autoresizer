@@ -17,46 +17,111 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PVCAutoResizePolicySpec defines the desired state of PVCAutoResizePolicy
 type PVCAutoResizePolicySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of PVCAutoResizePolicy. Edit pvcautoresizepolicy_types.go to remove/update
+	// Suspend is a policy-wide pause/suspend.
+	// Auto-expansion for all targeted PVC(s) will be suspended.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// +kubebuilder:default=false
+	Suspend bool `json:"suspend,omitempty"`
+
+	// Provisioner indicates the type of the provisioner (e.g. CSI driver name).
+	// PVC(s) referencing this provisioner will be targeted for auto-expansion.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="provisioner is immutable"
+	Provisioner string `json:"provisioner"`
+
+	// Selectors specifies targeting criteria for Namespace(s) and PVC(s),
+	// based on label selector and name regex expression.
+	// If empty, means target all Namespaces and PVCs.
+	// +optional
+	// +kubebuilder:default={}
+	Selectors Selectors `json:"selectors"`
+
+	// ExpansionThresholds configures when and how storage expansion is triggered,
+	// defines thresholds and increment rules for auto-expansion
+	// +optional
+	// +kubebuilder:default={}
+	ExpansionThresholds ExpansionThresholds `json:"expansionThresholds"`
+}
+
+// Selectors specifies targeting criteria for Namespace(s) and PVC(s).
+type Selectors struct {
+	// Namespace selects Namespace(s) whose PVC(s) may be targeted.
+	// If empty, means target all Namespaces.
+	// +optional
+	// +kubebuilder:default={}
+	Namespace TargetSelector `json:"namespace"`
+
+	// PersistentVolumeClaim selects PVC(s) within matched Namespace(s).
+	// If empty, means target all PVCs.
+	// +optional
+	// +kubebuilder:default={}
+	PersistentVolumeClaim TargetSelector `json:"persistentVolumeClaim"`
+}
+
+// TargetSelector selects objects by label selector and/or name regex.
+type TargetSelector struct {
+	// LabelSelector is a standard Kubernetes label selector.
+	// +optional
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
+
+	// NameRegexSelector is a regular expression matched against object names.
+	// +optional
+	NameRegexSelector *string `json:"nameRegexSelector,omitempty"`
+}
+
+// ExpansionThresholds defines thresholds and increment rules for auto-expansion.
+type ExpansionThresholds struct {
+	// UsagePercentage is the disk space usage percentage triggering expansion.
+	// +optional
+	// +kubebuilder:default=80
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	UsagePercentage uint8 `json:"usagePercentage,omitempty"`
+
+	// UsageInodePercentage is the inode usage percentage triggering expansion.
+	// +optional
+	// +kubebuilder:default=80
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	UsageInodePercentage uint8 `json:"usageInodePercentage,omitempty"`
+
+	// IncreasePercentage defines the resize increment as a percentage of the current
+	// volume size (e.g. 25 means add 25% of the current size).
+	// Used when IncreaseAbsolute is not set.
+	// +optional
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	IncreasePercentage uint8 `json:"increasePercentage,omitempty"`
+
+	// IncreaseAbsolute defines the absolute quantity to add to the current storage (e.g. "50Gi").
+	// When set, IncreaseAbsolute takes precedence over IncreasePercentage.
+	// +optional
+	IncreaseAbsolute *resource.Quantity `json:"increaseAbsolute,omitempty"`
+
+	// MaxCapacity is the upper bound limit for storage expansion (e.g. "2Ti").
+	// +optional
+	MaxCapacity *resource.Quantity `json:"maxCapacity,omitempty"`
 }
 
 // PVCAutoResizePolicyStatus defines the observed state of PVCAutoResizePolicy.
 type PVCAutoResizePolicyStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the PVCAutoResizePolicy resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
-	// +listType=map
-	// +listMapKey=type
+	// MatchedPVCsCount represents total count of the PVC(s) targeted by the policy.
 	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	MatchedPVCsCount int32 `json:"matchedPVCsCount,omitempty"`
+
+	// Phase indicates the policy state (e.g. Ready, Suspended, Duplicate).
+	// +optional
+	// +kubebuilder:validation:Enum=Ready;Suspended;Duplicate
+	Phase string `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true

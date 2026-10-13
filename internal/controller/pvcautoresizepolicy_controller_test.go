@@ -33,15 +33,13 @@ import (
 var _ = Describe("PVCAutoResizePolicy Controller", func() {
 	Context("When reconciling a resource", func() {
 		const (
-			resourceName      = "test-resource"
-			resourceNamespace = "default"
+			resourceName = "test-resource"
 		)
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: resourceNamespace,
+			Name: resourceName,
 		}
 		pvcautoresizepolicy := &autoresizev1alpha1.PVCAutoResizePolicy{}
 
@@ -51,10 +49,11 @@ var _ = Describe("PVCAutoResizePolicy Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &autoresizev1alpha1.PVCAutoResizePolicy{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: resourceNamespace,
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: autoresizev1alpha1.PVCAutoResizePolicySpec{
+						Provisioner: "example.csi.driver",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
