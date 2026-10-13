@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- autoresize_v1alpha1_pvcautoresizepolicy.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

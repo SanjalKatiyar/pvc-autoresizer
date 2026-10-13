@@ -8,4 +8,13 @@ layout:
 - go.kubebuilder.io/v4
 projectName: pvc-autoresizer
 repo: github.com/csi-addons/pvc-autoresizer
+resources:
+- api:
+    crdVersion: v1
+  controller: true
+  domain: csiaddons.openshift.io
+  group: autoresize
+  kind: PVCAutoResizePolicy
+  path: github.com/csi-addons/pvc-autoresizer/api/v1alpha1
+  version: v1alpha1
 version: "3"

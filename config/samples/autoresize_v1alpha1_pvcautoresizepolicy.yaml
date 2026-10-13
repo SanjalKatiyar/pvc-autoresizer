@@ -1,0 +1,9 @@
+apiVersion: autoresize.csiaddons.openshift.io/v1alpha1
+kind: PVCAutoResizePolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: pvc-autoresizer
+    app.kubernetes.io/managed-by: kustomize
+  name: pvcautoresizepolicy-sample
+spec:
+  # TODO(user): Add fields here
