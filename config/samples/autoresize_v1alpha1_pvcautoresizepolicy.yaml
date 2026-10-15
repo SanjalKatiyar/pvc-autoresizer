@@ -6,4 +6,20 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: pvcautoresizepolicy-sample
 spec:
-  # TODO(user): Add fields here
+  suspend: false
+  provisioner: example.csi.driver
+  selectors:
+    namespace:
+      labelSelector:
+        matchLabels:
+          environment: production
+    persistentVolumeClaim:
+      labelSelector:
+        matchLabels:
+          autoresize: "true"
+  expansionThresholds:
+    usagePercentage: 80
+    usageInodePercentage: 80
+    increasePercentage: 10
+    # increaseAbsolute: 50Gi
+    # maxCapacity: 2Ti

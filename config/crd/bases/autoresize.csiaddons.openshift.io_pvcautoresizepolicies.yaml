@@ -40,83 +40,211 @@ spec:
           spec:
             description: spec defines the desired state of PVCAutoResizePolicy
             properties:
-              foo:
-                description: foo is an example field of PVCAutoResizePolicy. Edit
-                  pvcautoresizepolicy_types.go to remove/update
+              expansionThresholds:
+                default: {}
+                description: |-
+                  ExpansionThresholds configures when and how storage expansion is triggered,
+                  defines thresholds and increment rules for auto-expansion
+                properties:
+                  increaseAbsolute:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      IncreaseAbsolute defines the absolute quantity to add to the current storage (e.g. "50Gi").
+                      When set, IncreaseAbsolute takes precedence over IncreasePercentage.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  increasePercentage:
+                    default: 10
+                    description: |-
+                      IncreasePercentage defines the resize increment as a percentage of the current
+                      volume size (e.g. 25 means add 25% of the current size).
+                      Used when IncreaseAbsolute is not set.
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxCapacity:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MaxCapacity is the upper bound limit for storage
+                      expansion (e.g. "2Ti").
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  usageInodePercentage:
+                    default: 80
+                    description: UsageInodePercentage is the inode usage percentage
+                      triggering expansion.
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  usagePercentage:
+                    default: 80
+                    description: UsagePercentage is the disk space usage percentage
+                      triggering expansion.
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                type: object
+              provisioner:
+                description: |-
+                  Provisioner indicates the type of the provisioner (e.g. CSI driver name).
+                  PVC(s) referencing this provisioner will be targeted for auto-expansion.
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: provisioner is immutable
+                  rule: self == oldSelf
+              selectors:
+                default: {}
+                description: |-
+                  Selectors specifies targeting criteria for Namespace(s) and PVC(s),
+                  based on label selector and name regex expression.
+                  If empty, means target all Namespaces and PVCs.
+                properties:
+                  namespace:
+                    default: {}
+                    description: |-
+                      Namespace selects Namespace(s) whose PVC(s) may be targeted.
+                      If empty, means target all Namespaces.
+                    properties:
+                      labelSelector:
+                        description: LabelSelector is a standard Kubernetes label
+                          selector.
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector
+                              requirements. The requirements are ANDed.
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      nameRegexSelector:
+                        description: NameRegexSelector is a regular expression matched
+                          against object names.
+                        type: string
+                    type: object
+                  persistentVolumeClaim:
+                    default: {}
+                    description: |-
+                      PersistentVolumeClaim selects PVC(s) within matched Namespace(s).
+                      If empty, means target all PVCs.
+                    properties:
+                      labelSelector:
+                        description: LabelSelector is a standard Kubernetes label
+                          selector.
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector
+                              requirements. The requirements are ANDed.
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      nameRegexSelector:
+                        description: NameRegexSelector is a regular expression matched
+                          against object names.
+                        type: string
+                    type: object
+                type: object
+              suspend:
+                default: false
+                description: |-
+                  Suspend is a policy-wide pause/suspend.
+                  Auto-expansion for all targeted PVC(s) will be suspended.
+                type: boolean
+            required:
+            - provisioner
             type: object
           status:
             description: status defines the observed state of PVCAutoResizePolicy
             properties:
-              conditions:
-                description: |-
-                  conditions represent the current state of the PVCAutoResizePolicy resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
-                items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
-                  properties:
-                    lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
+              matchedPVCsCount:
+                description: MatchedPVCsCount represents total count of the PVC(s)
+                  targeted by the policy.
+                format: int32
+                type: integer
+              phase:
+                description: Phase indicates the policy state (e.g. Ready, Suspended,
+                  Duplicate).
+                enum:
+                - Ready
+                - Suspended
+                - Duplicate
+                type: string
             type: object
         required:
         - spec
