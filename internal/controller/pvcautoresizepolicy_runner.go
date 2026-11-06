@@ -20,24 +20,26 @@ import (
 	"context"
 	"time"
 
+	"github.com/csi-addons/pvc-autoresizer/internal/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// Runner periodically evaluates PVCAutoResizePolicy objects and resizes matching PVCs.
-// PVCAutoResizePolicy create/update signals "trigger" so a tick can run earlier than "Interval".
+// PVCAutoResizePolicy create/update signals "trigger" so a tick can run earlier than "interval".
 type Runner struct {
 	client.Client
 	interval                time.Duration
 	hasClusterResourceQuota bool
+	operatorNamespace       string
 	trigger                 chan struct{}
 }
 
-func NewRunner(c client.Client, interval time.Duration, hasClusterResourceQuota bool) *Runner {
+func NewRunner(c client.Client, interval time.Duration, hasClusterResourceQuota bool, operatorNamespace string) *Runner {
 	return &Runner{
 		Client:                  c,
 		interval:                interval,
 		hasClusterResourceQuota: hasClusterResourceQuota,
+		operatorNamespace:       operatorNamespace,
 		trigger:                 make(chan struct{}, 1),
 	}
 }
@@ -58,6 +60,7 @@ func (r *Runner) Trigger() {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=quota.openshift.io,resources=clusterresourcequotas,verbs=get;list;watch
 
@@ -81,9 +84,26 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 }
 
+// runTick periodically evaluates PVCAutoResizePolicy objects and resizes matching PVCs.
 func (r *Runner) runTick(ctx context.Context) {
 	logger := log.FromContext(ctx).WithName("runner")
 	logger.Info("Running PVC autoresize tick")
 
-	// ToDo: implement periodic resize logic.
+	// Dynamic config load from ConfigMap.
+	cfg, err, shouldAbort := utils.LoadConfig(ctx, r.Client, r.operatorNamespace)
+	if err != nil {
+		if shouldAbort {
+			logger.Error(err, "Failed to load configuration, aborting tick")
+			return
+		}
+		logger.Info(err.Error())
+	}
+
+	logger.Info("Configuration loaded",
+		"prometheusURL", cfg.MetricsSource.PrometheusURL,
+		"useK8sMetricsAPI", cfg.MetricsSource.UseK8sMetricsAPI,
+		"customProvisionersCount", len(cfg.MetricsSource.Provisioners))
+
+	// ToDo: implement Phase 2-7.
+	_ = cfg
 }

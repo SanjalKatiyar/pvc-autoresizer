@@ -30,12 +30,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -44,6 +46,7 @@ import (
 
 	autoresizev1alpha1 "github.com/csi-addons/pvc-autoresizer/api/v1alpha1"
 	"github.com/csi-addons/pvc-autoresizer/internal/controller"
+	"github.com/csi-addons/pvc-autoresizer/internal/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -78,6 +81,13 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	operatorNamespace, err := utils.GetOperatorNamespace()
+	if err != nil {
+		setupLog.Error(err, "Failed to get operator namespace")
+		os.Exit(1)
+	}
+	setupLog.Info("Operator namespace", "namespace", operatorNamespace)
+
 	cfg := ctrl.GetConfigOrDie()
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
@@ -87,6 +97,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "91e00fff.csiaddons.openshift.io",
+		Cache:                  getCacheOptions(operatorNamespace),
 	})
 	if err != nil {
 		setupLog.Error(err, "Failed to start manager")
@@ -100,7 +111,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	resizer := controller.NewRunner(mgr.GetClient(), resizerInterval, hasCRQ)
+	resizer := controller.NewRunner(mgr.GetClient(), resizerInterval, hasCRQ, operatorNamespace)
 	if err := mgr.Add(resizer); err != nil {
 		setupLog.Error(err, "Failed to add PVC autoresize runner")
 		os.Exit(1)
@@ -132,19 +143,39 @@ func main() {
 	}
 }
 
+func getCacheOptions(operatorNamespace string) cache.Options {
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			// Cache only a single required ConfigMap.
+			&corev1.ConfigMap{}: {
+				Namespaces: map[string]cache.Config{
+					operatorNamespace: {},
+				},
+				Field: fields.SelectorFromSet(fields.Set{
+					"metadata.name": utils.ConfigMapName,
+				}),
+			},
+		},
+	}
+}
+
 // setupInformers checks for the ClusterResourceQuota API availability and registers cache informers early.
 // ClusterResourceQuota is usually only available on OpenShift clusters (not a generic K8s resource).
 func setupInformers(ctx context.Context, mgr ctrl.Manager, cfg *rest.Config) (bool, error) {
-	cache := mgr.GetCache()
+	mgrCache := mgr.GetCache()
 	objects := []client.Object{
+		// Only required PVC fields, using cache options.
 		&corev1.PersistentVolumeClaim{},
 		&autoresizev1alpha1.PVCAutoResizePolicy{},
+		// Only required Namespace fields, using cache options.
 		&corev1.Namespace{},
 		&corev1.ResourceQuota{},
 		&storagev1.StorageClass{},
+		// Only a single operator config ConfigMap, using cache options.
+		&corev1.ConfigMap{},
 	}
 	for _, obj := range objects {
-		if _, err := cache.GetInformer(ctx, obj); err != nil {
+		if _, err := mgrCache.GetInformer(ctx, obj); err != nil {
 			return false, err
 		}
 	}
@@ -155,7 +186,7 @@ func setupInformers(ctx context.Context, mgr ctrl.Manager, cfg *rest.Config) (bo
 	}
 	if available {
 		setupLog.Info("ClusterResourceQuota API available, registering informer")
-		if _, err := cache.GetInformer(ctx, &quotav1.ClusterResourceQuota{}); err != nil {
+		if _, err := mgrCache.GetInformer(ctx, &quotav1.ClusterResourceQuota{}); err != nil {
 			return false, err
 		}
 	} else {
